@@ -1,5 +1,16 @@
 # GitHub 업적 감사 도구
 
+처음 방문했다면 아래 링크의 용도를 확인하세요.
+
+| 링크 | 용도 |
+| --- | --- |
+| [한국어 사용법](https://github.com/deuxdoom/github-badge/blob/main/README.ko.md) | 설치 준비, 실행 명령과 결과 확인 방법을 읽는 문서입니다. |
+| [문서 개선 공동 작업 PR #3](https://github.com/deuxdoom/github-badge/pull/3) | 이번 변경 내용과 문서 보완 의견을 함께 확인하는 작업 화면입니다. |
+
+문서 보완 의견은 PR 페이지의 **Conversation** 탭에서 아래쪽 **Add a comment** 입력 칸에 작성하고 **Comment**를 눌러 제출합니다. PR의 작업 설명과 이 사용법 문서는 각각 별도의 화면입니다.
+
+이 안내는 [처음 사용하면서 링크와 댓글 위치를 찾기 어려웠다는 피드백](https://github.com/deuxdoom/github-badge/pull/3#issuecomment-6185478985)을 반영했습니다.
+
 Python 3.13 이상과 인증된 GitHub CLI가 필요합니다. 별도 Python 패키지는 설치하지 않습니다. `gh api --hostname github.com user --jq .login`이 `deuxdoom`인지 확인하며 다른 계정이면 중단합니다.
 
 ```powershell
