@@ -14,7 +14,7 @@ from unittest.mock import patch
 from achievements import BOOTSTRAP, Publisher, make_plan, statuses, verify_local_bundle
 from audit import BadgeParser, collect, profile_badges
 from cleanup import cleanup
-from github_client import APIError, GitHub, SafetyError, parse_response, redact
+from github_client import APIError, GitHub, PendingAction, SafetyError, parse_response, redact
 from storage import digest, load, save
 
 
@@ -250,6 +250,75 @@ class WorkflowTests(unittest.TestCase):
             self.publisher.execute()
         self.assertFalse(self.state.get("merged", False))
 
+    def test_unknown_mergeability_is_rechecked_without_duplicate_pr(self):
+        sleeps = []
+        self.publisher.sleep = sleeps.append
+        original_get = self.remote.get
+        polls = []
+        def get(endpoint):
+            pr = original_get(endpoint)
+            if endpoint.endswith("/pulls/1") and not pr["merged"]:
+                polls.append(endpoint)
+                if len(polls) <= 2:
+                    pr.update(mergeable=None, mergeable_state="unknown")
+            return pr
+        self.remote.get = get
+        self.publisher.execute()
+        self.assertTrue(self.state["merged"])
+        self.assertEqual(sleeps, [1, 2])
+        self.assertEqual(sum(path.endswith("/pulls") for _, path in self.remote.writes), 1)
+
+    def test_unknown_mergeability_wait_is_bounded(self):
+        sleeps = []
+        self.publisher.sleep = sleeps.append
+        original_get = self.remote.get
+        def get(endpoint):
+            pr = original_get(endpoint)
+            if endpoint.endswith("/pulls/1"):
+                pr.update(mergeable=None, mergeable_state="unknown")
+            return pr
+        self.remote.get = get
+        with self.assertRaises(PendingAction):
+            self.publisher.execute()
+        self.assertEqual(sleeps, [1, 2, 4, 8])
+        self.assertFalse(any(path.endswith("/merge") for _, path in self.remote.writes))
+
+    def test_review_added_while_waiting_is_checked_before_merge(self):
+        original_get = self.remote.get
+        polls = []
+        def get(endpoint):
+            pr = original_get(endpoint)
+            if endpoint.endswith("/pulls/1"):
+                polls.append(endpoint)
+                if len(polls) == 1:
+                    pr.update(mergeable=None, mergeable_state="unknown")
+            return pr
+        self.remote.get = get
+        self.publisher.sleep = lambda _: self.remote.reviews.append({"state": "CHANGES_REQUESTED"})
+        with self.assertRaises(SafetyError):
+            self.publisher.execute()
+        self.assertFalse(any(path.endswith("/merge") for _, path in self.remote.writes))
+
+    def test_head_change_during_mergeability_wait_stops_merge(self):
+        sleeps = []
+        self.publisher.sleep = sleeps.append
+        original_get = self.remote.get
+        polls = []
+        def get(endpoint):
+            pr = original_get(endpoint)
+            if endpoint.endswith("/pulls/1"):
+                polls.append(endpoint)
+                if len(polls) == 1:
+                    pr.update(mergeable=None, mergeable_state="unknown")
+                else:
+                    pr["head"]["sha"] = "other-work"
+            return pr
+        self.remote.get = get
+        with self.assertRaises(SafetyError):
+            self.publisher.execute()
+        self.assertEqual(sleeps, [1])
+        self.assertFalse(any(path.endswith("/merge") for _, path in self.remote.writes))
+
     def test_account_mismatch_stops_before_writes(self):
         self.remote.login = "other"
         with self.assertRaises(SafetyError):
@@ -285,6 +354,12 @@ class WorkflowTests(unittest.TestCase):
         rows = statuses(self.audit, {"merged": True, "pr_url": "https://github.com/example"})
         self.assertEqual(rows[2]["status"], "PENDING")
         self.assertEqual(rows[3]["status"], "PENDING")
+
+    def test_report_does_not_claim_zero_writes_after_pr_creation(self):
+        rows = statuses(self.audit, {"pr_number": 1, "base_sha": "base", "branch_created": True})
+        self.assertEqual(rows[3]["status"], "PENDING")
+        self.assertEqual(rows[3]["evidence"], "https://github.com/deuxdoom/github-badge/pull/1")
+        self.assertNotIn("0건", rows[3]["next"])
 
     def test_confirmed_earned_goals_do_not_generate_a_plan(self):
         plan = make_plan(self.audit, {"user_confirmed_earned": ["YOLO", "Pull Shark"]})

@@ -13,6 +13,10 @@ class SafetyError(RuntimeError):
     pass
 
 
+class PendingAction(SafetyError):
+    """A remote calculation is still in progress; no unsafe action was attempted."""
+
+
 @dataclass
 class APIError(RuntimeError):
     status: int

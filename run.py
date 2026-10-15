@@ -9,7 +9,7 @@ import sys
 from achievements import Publisher, make_plan, preview, statuses, verify_local_bundle
 from audit import collect, now
 from cleanup import cleanup
-from github_client import APIError, GitHub, SafetyError, redact
+from github_client import APIError, GitHub, PendingAction, SafetyError, redact
 from storage import ROOT, STATE, digest, load, locked, save
 
 
@@ -174,7 +174,8 @@ def main(argv=None, client_factory=GitHub):
             print_report(final)
             return 0
         except (APIError, SafetyError, subprocess.SubprocessError, OSError) as exc:
-            state.update(status="PENDING" if isinstance(exc, APIError) and exc.uncertain else "BLOCKED",
+            state.update(status="PENDING" if isinstance(exc, PendingAction) or (
+                         isinstance(exc, APIError) and exc.uncertain) else "BLOCKED",
                          error=redact(str(exc)))
             publisher.save()
             print_report(report(current, state))
