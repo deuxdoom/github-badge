@@ -1,0 +1,8 @@
+__pycache__/
+*.py[cod]
+.state/
+evidence/
+config.json
+.env
+.badge-automation-root
+RESULT.ko.md
