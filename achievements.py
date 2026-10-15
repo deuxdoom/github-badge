@@ -3,11 +3,12 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import time
 import uuid
 from urllib.parse import quote
 
 from audit import now
-from github_client import APIError, SafetyError
+from github_client import APIError, PendingAction, SafetyError
 from storage import ROOT, STATE, digest, load, save
 
 SOURCE_FILES = (".gitignore", "README.md", "README.ko.md", "run.py", "audit.py", "achievements.py",
@@ -101,6 +102,7 @@ class Publisher:
             raise SafetyError("이 계획에 대한 승인이 없습니다.")
         self.client, self.plan, self.state = client, plan, state
         self.persist = persist or (lambda value: save(STATE / "checkpoint.json", value))
+        self.sleep = time.sleep
         self.prefix = f"repos/{plan['repo']}"
         self.marker = f"<!-- github-badge-run:{plan['run_id']} -->"
 
@@ -219,11 +221,20 @@ class Publisher:
 
     def merge(self, number):
         endpoint = self.prefix + f"/pulls/{number}"
-        pr = self.client.get(endpoint)
-        if (pr["head"]["sha"] != self.state["commit_sha"] or pr["head"]["ref"] != self.plan["branch"]
-                or pr["head"]["repo"]["full_name"] != self.plan["repo"] or pr["base"]["ref"] != "main"
-                or pr["user"]["login"] != "deuxdoom" or self.marker not in (pr.get("body") or "")):
-            raise SafetyError("PR 소유자/대상/승인 내용 불일치: 병합 또는 성공 판정을 중단합니다.")
+        for attempt in range(5):
+            pr = self.client.get(endpoint)
+            if (pr["head"]["sha"] != self.state["commit_sha"] or pr["head"]["ref"] != self.plan["branch"]
+                    or pr["head"]["repo"]["full_name"] != self.plan["repo"] or pr["base"]["ref"] != "main"
+                    or pr["user"]["login"] != "deuxdoom" or self.marker not in (pr.get("body") or "")):
+                raise SafetyError("PR 소유자/대상/승인 내용 불일치: 병합 또는 성공 판정을 중단합니다.")
+            if pr["merged"] or pr["state"] != "open" or (
+                    pr.get("mergeable") is not None and pr.get("mergeable_state") != "unknown"):
+                break
+            if attempt == 4:
+                raise PendingAction("GitHub 병합 가능 여부 계산 대기 중입니다. 나중에 --resume 하세요.")
+            delay = 2 ** attempt
+            print(f"GitHub 병합 가능 여부 계산 중: {delay}초 후 다시 확인합니다.")
+            self.sleep(delay)
         if pr["merged"]:
             if self.state.get("pending") == "merge":
                 self.recover("merged", True, "merge")
@@ -296,7 +307,11 @@ def statuses(audit, state):
         elif state.get("merged"):
             row.update(status="PENDING", action="감사 도구 구현 PR 1건 병합", evidence=state.get("pr_url", ""),
                        next="업적 미표시: 반영 지연/숨김/기타 자격 조건 확인; 병합은 획득 보장 아님")
+        elif state.get("pr_number"):
+            row.update(status="PENDING", action="감사 도구 구현 PR 1건 생성, 병합 대기",
+                       evidence=state.get("pr_url") or f"https://github.com/deuxdoom/github-badge/pull/{state['pr_number']}",
+                       next=state.get("error") or "병합 가능 여부와 필수 검사 확인 후 같은 PR을 재개")
         else:
-            row["next"] = "프로필 미표시. 도구 게시 계획 승인 전 원격 쓰기 0건"
+            row["next"] = "프로필 미표시. 현재 실행 결과는 보고서의 자원 목록에서 확인"
         rows.append(row)
     return rows

@@ -1,5 +1,16 @@
 # GitHub 업적 감사 도구
 
+처음 방문했다면 아래 링크의 용도를 확인하세요.
+
+| 링크 | 용도 |
+| --- | --- |
+| [한국어 사용법](https://github.com/deuxdoom/github-badge/blob/main/README.ko.md) | 설치 준비, 실행 명령과 결과 확인 방법을 읽는 문서입니다. |
+| [문서 개선 공동 작업 PR #3](https://github.com/deuxdoom/github-badge/pull/3) | 이번 변경 내용과 문서 보완 의견을 함께 확인하는 작업 화면입니다. |
+
+문서 보완 의견은 PR 페이지의 **Conversation** 탭에서 아래쪽 **Add a comment** 입력 칸에 작성하고 **Comment**를 눌러 제출합니다. PR의 작업 설명과 이 사용법 문서는 각각 별도의 화면입니다.
+
+이 안내는 [처음 사용하면서 링크와 댓글 위치를 찾기 어려웠다는 피드백](https://github.com/deuxdoom/github-badge/pull/3#issuecomment-6185478985)을 반영했습니다.
+
 Python 3.13 이상과 인증된 GitHub CLI가 필요합니다. 별도 Python 패키지는 설치하지 않습니다. `gh api --hostname github.com user --jq .login`이 `deuxdoom`인지 확인하며 다른 계정이면 중단합니다.
 
 ```powershell
@@ -16,7 +27,7 @@ Quickdraw와 Starstruck은 `EARNED / USER_CONFIRMED / SKIPPED`로 고정합니�
 
 승인 대상은 현재 비어 있는 `deuxdoom/github-badge`에 최초 README 커밋과 도구 소스 PR 1건을 게시하는 작업입니다. 기존 파일이 생겼거나 기본 브랜치/가시성이 바뀌면 중단합니다. 다른 저장소와 기존 프로젝트는 수정하지 않습니다. 의미 없는 PR 반복, 거짓 공동 작성, 자동 스타/팔로우, 가짜 답변 채택은 구현하지 않았습니다.
 
-리뷰 의무를 우회하지 않습니다. 보호된 main, 활성 규칙, 추가된 리뷰, 실패/진행 중 검사, 변경된 SHA가 있으면 병합을 중단합니다. API가 병합 상태를 아직 계산 중이면 나중에 `--resume`으로 재개하세요. GitHub API의 병합과 프로필 업적 표시를 각각 확인하므로 업적 획득은 보장하지 않습니다.
+리뷰 의무를 우회하지 않습니다. 보호된 main, 활성 규칙, 추가된 리뷰, 실패/진행 중 검사, 변경된 SHA가 있으면 병합을 중단합니다. API가 병합 상태를 계산 중이면 1·2·4·8초 간격으로 최대 5번 조회합니다. 기다리는 동안에도 PR 소유자·대상·SHA를 매번 확인하고, 계산 완료 후 보호 규칙·리뷰·검사를 다시 확인합니다. 15초 후에도 계산 중이면 `PENDING`으로 저장하므로 나중에 `--resume`으로 같은 PR을 재개하세요. 이미 생성된 PR은 보고서에 병합 대기로 표시됩니다. GitHub API의 병합과 프로필 업적 표시를 각각 확인하므로 업적 획득은 보장하지 않습니다.
 
 ```powershell
 python run.py --resume
